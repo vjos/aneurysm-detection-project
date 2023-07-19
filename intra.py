@@ -4,43 +4,73 @@ import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
+
 """ Todo:
+- train/valid/test sets
+- obj loader for full visualisation
 - figure out if the annotated data is a subset of the generated data (it should be)
 - normalise to unit point if necessary
 - implement npoints restriction with np.random.choice
 - implement augmentation: research appropriate pointcloud augmentation techniques
 - data exploration/visualisation notebook
+- aneurysm localisation via pyramid-style segmentation
 """
 
 
 class IntrA(Dataset):
-    def __init__(self, root, train=True, npoints=2048, data_aug=True, choice=0):
-        self.classes = ["vessel", "aneurysm"]
+    def __init__(
+        self, root, dataset="generated", npoints=2048, data_aug=True, choice=0
+    ):
         self.paths, self.labels = [], []
-
         root = os.path.expanduser(root)
-        for i, cls in enumerate(self.classes):
-            cls_path = os.path.join(root, "generated", cls, "ad")
-            paths = [
-                os.path.join(cls_path, f)
-                for f in os.listdir(cls_path)
-                if os.path.splitext(f)[-1] == ".ad"
-            ]
-            self.paths += paths
-            self.labels += [i] * len(paths)
+
+        if dataset == "generated":
+            for i, cls in enumerate(["vessel", "aneurysm"]):
+                paths = self.get_paths(os.path.join(root, dataset, cls, "ad"))
+                self.paths += paths
+                self.labels += [i] * len(paths)
+        elif dataset == "annotated":
+            self.paths = self.get_paths(os.path.join(root, dataset, "ad"))
+            self.labels = [1] * len(self.paths)
+        elif dataset == "complete":
+            self.paths = self.get_paths(os.path.join(root, dataset))
+            self.labels = [0] * len(self.paths)
+        else:
+            raise IOError(f"Unknown dataset type '{dataset}'.")
 
     def __getitem__(self, index):
-        return load_pointcloud(self.paths[index], self.labels[index])
+        return load_pointcloud(self.paths[index]), self.labels[index]
+
+    def get_paths(self, dir):
+        """Returns list of full paths of all pointcloud files in a given directory."""
+        return [
+            os.path.join(dir, f)
+            for f in os.listdir(dir)
+            if os.path.splitext(f)[-1] in [".ad", ".obj"]
+        ]
 
 
 def load_pointcloud(file):
-    """Load an intra pointcloud as a tensor from a .ad file. Each line represents a point: [(x,y,z), norm(x,y,z), seg_class]."""
-    f = np.loadtxt(file)
-    return torch.from_numpy(f[:, :3].astype(np.float32))
+    """Load an intra pointcloud as a tensor.
+    .ad files: Each line represents a point: [(x,y,z), norm(x,y,z), seg_class]. Return [pcld, seg].
+    .obj files: Lines prefixed with v represent the (x,y,z) coordinates for a point. Returns [pcld].
+    """
+    if (ext := os.path.splitext(file)[-1]) == ".ad":
+        f = np.loadtxt(file)
+        return torch.from_numpy(f[:, [0, 1, 2, 6]].astype(np.float32))
+    elif ext == ".obj":
+        coords = []
+        with open(file, "r") as F:
+            for line in F:
+                vals = line.strip().split(" ")
+                if vals[0] == "v":
+                    coords.append(vals[1:])
+        return torch.tensor(
+            np.hstack((np.array(coords), np.zeros((len(coords), 1)))).astype(np.float32)
+        )
+    else:
+        raise IOError(f"File type {ext} is not supported.")
 
 
 if __name__ == "__main__":
     dataset = IntrA("~/Documents/Datasets/IntrA")
-    tst = os.path.expanduser(
-        "~/Documents/Datasets/IntrA/generated/aneurysm/ad/ArteryObjAN2-0_addon.ad"
-    )
