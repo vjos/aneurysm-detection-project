@@ -7,22 +7,18 @@ from torch.utils.data import DataLoader
 
 """ Todo:
 - train/valid/test sets
-- obj loader for full visualisation
 - figure out if the annotated data is a subset of the generated data (it should be)
 - normalise to unit point if necessary
-- implement npoints restriction with np.random.choice
 - implement augmentation: research appropriate pointcloud augmentation techniques
-- data exploration/visualisation notebook
 - aneurysm localisation via pyramid-style segmentation
 """
 
 
 class IntrA(Dataset):
-    def __init__(
-        self, root, dataset="generated", npoints=2048, data_aug=True, choice=0
-    ):
-        self.paths, self.labels = [], []
+    def __init__(self, root, dataset="generated", npoints=2048, data_aug=True):
         root = os.path.expanduser(root)
+        self.npoints = npoints
+        self.paths, self.labels = [], []
 
         if dataset == "generated":
             for i, cls in enumerate(["vessel", "aneurysm"]):
@@ -39,7 +35,14 @@ class IntrA(Dataset):
             raise IOError(f"Unknown dataset type '{dataset}'.")
 
     def __getitem__(self, index):
-        return load_pointcloud(self.paths[index]), self.labels[index]
+        """Load pointcloud, sample/duplicate to correct npoints, then return with label."""
+        pcld = load_pointcloud(self.paths[index])
+        point_sample = np.random.choice(
+            pcld.shape[0], self.npoints, replace=(pcld.shape[0] < self.npoints)
+        )
+        pcld = pcld[point_sample, :]
+
+        return pcld, self.labels[index]
 
     def get_paths(self, dir):
         """Returns list of full paths of all pointcloud files in a given directory."""
