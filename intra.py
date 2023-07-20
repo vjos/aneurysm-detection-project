@@ -2,7 +2,6 @@ import numpy as np
 import os
 import torch
 from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
 
 
 """ Todo:
@@ -15,10 +14,13 @@ from torch.utils.data import DataLoader
 
 
 class IntrA(Dataset):
-    def __init__(self, root, dataset="generated", npoints=2048, data_aug=True):
+    def __init__(
+        self, root, dataset="generated", npoints=2048, data_aug=True, exclude_seg=False
+    ):
         root = os.path.expanduser(root)
         self.npoints = npoints
         self.paths, self.labels = [], []
+        self.exclude_seg = exclude_seg
 
         if dataset == "generated":
             for i, cls in enumerate(["vessel", "aneurysm"]):
@@ -37,12 +39,17 @@ class IntrA(Dataset):
     def __getitem__(self, index):
         """Load pointcloud, sample/duplicate to correct npoints, then return with label."""
         pcld = load_pointcloud(self.paths[index])
+        if self.exclude_seg:
+            pcld = pcld[:, [0, 1, 2]]
         point_sample = np.random.choice(
             pcld.shape[0], self.npoints, replace=(pcld.shape[0] < self.npoints)
         )
         pcld = pcld[point_sample, :]
 
         return pcld, self.labels[index]
+
+    def __len__(self):
+        return len(self.paths)
 
     def get_paths(self, dir):
         """Returns list of full paths of all pointcloud files in a given directory."""
