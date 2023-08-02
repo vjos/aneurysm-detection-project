@@ -45,7 +45,7 @@ def train_model(
 
     hist = {"train_loss": [], "train_acc": [], "valid_loss": [], "valid_acc": []}
 
-    for epoch in range(epochs):
+    for epoch in range(1, epochs + 1):
         print(f"Epoch: {epoch}", end="\r")
         scheduler.step()
         for i, (pcld, label) in enumerate(train):
@@ -62,14 +62,14 @@ def train_model(
             loss.backward()
             optimizer.step()
 
-        # evaluate the model and save a checkpoint with metrics
+        # evaluate the model
+        hist["train_acc"].append(ta := eval_model(model, train))
+        hist["valid_acc"].append(va := eval_model(model, test))
+        model.train()
+
+        # print metrics and save checkpoint
         if epoch % eval_epoch == 0:
-            hist["train_acc"].append(ta := eval_model(model, train))
-            hist["valid_acc"].append(va := eval_model(model, test))
-
             print(f"Epoch: {epoch}, Train Accuracy: {ta}, Validaiton Accuracy: {va}")
-
-            model.train()
 
             checkpoint = f"{model_name}_{epoch}.ckpt"
             checkpoint_path = os.path.join(snapshot_path, checkpoint)
