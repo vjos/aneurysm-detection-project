@@ -1,9 +1,6 @@
 from __future__ import print_function
-import argparse
-import boto3
 import numpy as np
 import os
-import random
 import torch
 import torch.nn.parallel
 import torch.optim as optim
@@ -11,6 +8,12 @@ import torch.utils.data
 from models.pointnet import feature_transform_regularizer
 import torch.nn.functional as F
 from tqdm import tqdm
+import dotenv
+import mlflow
+
+dotenv.load_dotenv()  # load the MLflow http authentication parameters
+tracking_uri = "http://35.177.97.182"  # set the mlflow tracking uri
+mlflow.set_tracking_uri(tracking_uri)
 
 classes = ["vessel", "aneurysm"]
 
@@ -22,16 +25,13 @@ dev = (
     else "cpu"
 )
 
-session = boto3.session.Session(profile_name="masters-root")
-s3 = session.client("s3")
-
 
 def train_model(
     model,
     train,
     test,
     epochs=5,
-    eval_epoch=10,
+    checkpoint_epoch=10,
     feat_trans=False,
     model_name="model",
     snapshot_path="./snapshots",
@@ -45,46 +45,60 @@ def train_model(
 
     hist = {"train_loss": [], "train_acc": [], "valid_loss": [], "valid_acc": []}
 
-    for epoch in range(1, epochs + 1):
-        print(f"Epoch: {epoch}", end="\r")
-        scheduler.step()
-        for i, (pcld, label) in enumerate(train):
-            pcld = pcld.transpose(2, 1)
-            pcld, label = pcld.to(dev), label.to(dev)
-            optimizer.zero_grad()
-            model = model.train()
-            pred = model(pcld)[0]
-            loss = F.nll_loss(pred, label)
+    if exp := mlflow.get_experiment_by_name(model_name):
+        id = exp.experiment_id
+    else:
+        id = mlflow.create_experiment(model_name)
 
-            # if feat_trans:
-            #     loss += feature_transform_regularizer(trans_feat) * 0.001
+    with mlflow.start_run(experiment_id=id):
+        for epoch in range(1, epochs + 1):
+            print(f"Epoch: {epoch}", end="\r")
+            scheduler.step()
+            for i, (pcld, label) in enumerate(train):
+                pcld = pcld.transpose(2, 1)
+                pcld, label = pcld.to(dev), label.to(dev)
+                optimizer.zero_grad()
+                model = model.train()
+                pred = model(pcld)[0]
+                loss = F.nll_loss(pred, label)
 
-            loss.backward()
-            optimizer.step()
+                # if feat_trans:
+                #     loss += feature_transform_regularizer(trans_feat) * 0.001
 
-        # evaluate the model
-        hist["train_acc"].append(ta := eval_model(model, train))
-        hist["valid_acc"].append(va := eval_model(model, test))
-        model.train()
+                loss.backward()
+                optimizer.step()
 
-        # print metrics and save checkpoint
-        if epoch % eval_epoch == 0:
-            print(f"Epoch: {epoch}, Train Accuracy: {ta}, Validaiton Accuracy: {va}")
+            # evaluate the model
+            t = eval_model(model, train)
+            v = eval_model(model, test)
+            hist["train_acc"].append(t[0])
+            hist["valid_acc"].append(v[0])
+            mlflow.log_metric("train_acc", t[0], step=1)
+            mlflow.log_metric("valid_acc", v[0], step=1)
+            mlflow.log_metric("valid_vessel_recall", v[1][0] / v[2][0], step=1)
+            mlflow.log_metric("valid_aneurysm_recall", v[1][1] / v[2][1], step=1)
+            model.train()
 
-            checkpoint = f"{model_name}_{epoch}.ckpt"
-            checkpoint_path = os.path.join(snapshot_path, checkpoint)
-            torch.save(
-                {
-                    "state_dict": model.state_dict(),
-                    "history": hist,
-                    "epochs": epoch,
-                },
-                checkpoint_path,
-            )
-            s3.upload_file(checkpoint_path, "masters-models-bucket", checkpoint)
+            # print metrics and save checkpoint
+            if epoch % checkpoint_epoch == 0:
+                print(
+                    f"Epoch: {epoch}, Train Accuracy: {t[0]}, Validaiton Accuracy: {v[0]}"
+                )
+
+                checkpoint = f"{model_name}_{epoch}.ckpt"
+                checkpoint_path = os.path.join(snapshot_path, checkpoint)
+                torch.save(
+                    {
+                        "state_dict": model.state_dict(),
+                        "history": hist,
+                        "epochs": epoch,
+                    },
+                    checkpoint_path,
+                )
+                mlflow.log_artifact(checkpoint_path, "checkpoints")
 
 
-def eval_model(model, test, verbose=False):
+def eval_model(model, test, training_eval=False, verbose=False):
     total_correct = 0
     total_testset = 0
     total_classes = {}
@@ -117,4 +131,4 @@ def eval_model(model, test, verbose=False):
                 f"{classes[int(cls)]}: {correct_classes[cls]}/{total_classes[cls]}={correct_classes[cls]/total_classes[cls]}"
             )
 
-    return total_correct / float(total_testset)
+    return total_correct / float(total_testset), correct_classes, total_classes
