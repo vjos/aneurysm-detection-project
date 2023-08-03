@@ -12,8 +12,7 @@ import dotenv
 import mlflow
 
 dotenv.load_dotenv()  # load the MLflow http authentication parameters
-tracking_uri = "http://35.177.97.182"  # set the mlflow tracking uri
-mlflow.set_tracking_uri(tracking_uri)
+mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI"))
 
 classes = ["vessel", "aneurysm"]
 
