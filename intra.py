@@ -15,12 +15,19 @@ from torch.utils.data import Dataset
 
 class IntrA(Dataset):
     def __init__(
-        self, root, dataset="generated", npoints=2048, data_aug=True, exclude_seg=False
+        self,
+        root,
+        dataset="generated",
+        npoints=2048,
+        data_aug=True,
+        exclude_seg=False,
+        norm=False,
     ):
         root = os.path.expanduser(root)
         self.npoints = npoints
         self.paths, self.labels = [], []
-        self.exclude_seg = exclude_seg
+        self.seg = not exclude_seg
+        self.norm = norm
 
         if dataset == "generated":
             for i, cls in enumerate(["vessel", "aneurysm"]):
@@ -38,9 +45,7 @@ class IntrA(Dataset):
 
     def __getitem__(self, index):
         """Load pointcloud, sample/duplicate to correct npoints, then return with label."""
-        pcld = load_pointcloud(self.paths[index])
-        if self.exclude_seg:
-            pcld = pcld[:, [0, 1, 2]]
+        pcld = load_pointcloud(self.paths[index], norm=self.norm, seg=self.seg)
         point_sample = np.random.choice(
             pcld.shape[0], self.npoints, replace=(pcld.shape[0] < self.npoints)
         )
@@ -60,14 +65,18 @@ class IntrA(Dataset):
         ]
 
 
-def load_pointcloud(file):
+def load_pointcloud(file, norm=False, seg=False):
     """Load an intra pointcloud as a tensor.
     .ad files: Each line represents a point: [(x,y,z), norm(x,y,z), seg_class]. Return [pcld, seg].
     .obj files: Lines prefixed with v represent the (x,y,z) coordinates for a point. Returns [pcld].
     """
     if (ext := os.path.splitext(file)[-1]) == ".ad":
         f = np.loadtxt(file)
-        return torch.from_numpy(f[:, [0, 1, 2, 6]].astype(np.float32))
+        if not norm:
+            f = f[:, [0, 1, 2, 6]]
+        if not seg:
+            f = f[:, :-1]
+        return torch.from_numpy(f.astype(np.float32))
     elif ext == ".obj":
         coords = []
         with open(file, "r") as F:

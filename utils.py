@@ -30,6 +30,7 @@ def train_model(
     feat_trans=False,
     model_name="model",
     snapshot_path="./snapshots",
+    norm=False,
 ):
     optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
@@ -54,7 +55,10 @@ def train_model(
                 pcld, label = pcld.to(dev), label.to(dev)
                 optimizer.zero_grad()
                 model = model.train()
-                pred = model(pcld)[0]
+                if norm:
+                    pred = model(pcld[:, :3, :], pcld[:, 3:, :])
+                else:
+                    pred = model(pcld)[0]
                 loss = F.nll_loss(pred, label)
 
                 # if feat_trans:
@@ -64,8 +68,8 @@ def train_model(
                 optimizer.step()
 
             # evaluate the model
-            t = eval_model(model, train)
-            v = eval_model(model, test)
+            t = eval_model(model, train, norm=norm)
+            v = eval_model(model, test, norm=norm)
             hist["train_acc"].append(t[0])
             hist["valid_acc"].append(v[0])
             mlflow.log_metric("train_acc", t[0], step=epoch)
@@ -93,7 +97,7 @@ def train_model(
                 mlflow.log_artifact(checkpoint_path, "checkpoints")
 
 
-def eval_model(model, test, training_eval=False, verbose=False):
+def eval_model(model, test, training_eval=False, verbose=False, norm=False):
     total_correct = 0
     total_testset = 0
     total_classes = {}
@@ -103,7 +107,10 @@ def eval_model(model, test, training_eval=False, verbose=False):
         pcld = pcld.transpose(2, 1)
         pcld, label = pcld.to(dev), label.to(dev)
         model.eval()
-        pred = model(pcld)[0]
+        if norm:
+            pred = model(pcld[:, :3, :], pcld[:, 3:, :])
+        else:
+            pred = model(pcld)[0]
         pred_choice = pred.data.max(1)[1]
         correct = pred_choice.eq(label.data)
         for c, l in zip(correct, label):
