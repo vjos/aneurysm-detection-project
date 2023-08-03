@@ -68,10 +68,10 @@ def train_model(
             v = eval_model(model, test)
             hist["train_acc"].append(t[0])
             hist["valid_acc"].append(v[0])
-            mlflow.log_metric("train_acc", t[0], step=1)
-            mlflow.log_metric("valid_acc", v[0], step=1)
-            mlflow.log_metric("valid_vessel_recall", v[1][0] / v[2][0], step=1)
-            mlflow.log_metric("valid_aneurysm_recall", v[1][1] / v[2][1], step=1)
+            mlflow.log_metric("train_acc", t[0], step=epoch)
+            mlflow.log_metric("valid_acc", v[0], step=epoch)
+            mlflow.log_metric("valid_vessel_recall", v[1][0] / v[2][0], step=epoch)
+            mlflow.log_metric("valid_aneurysm_recall", v[1][1] / v[2][1], step=epoch)
             model.train()
 
             # print metrics and save checkpoint
