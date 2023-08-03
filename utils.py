@@ -8,11 +8,7 @@ import torch.utils.data
 from models.pointnet import feature_transform_regularizer
 import torch.nn.functional as F
 from tqdm import tqdm
-import dotenv
 import mlflow
-
-dotenv.load_dotenv()  # load the MLflow http authentication parameters
-mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI"))
 
 classes = ["vessel", "aneurysm"]
 
