@@ -128,7 +128,7 @@ def train_kfold_intra(
     cv_metrics = {}  # used to track cross-validation metrics
 
     with mlflow.start_run(
-        experiment_id=exp_id, run_name=f"5fold_{model_name}_{epochs}e"
+        experiment_id=exp_id, run_name=f"5fold_{model_name}_{epochs}e_bs{batch_size}"
     ):
         for fold in [1, 2, 3, 4, 5]:
             print(f"\nF{fold}:")
