@@ -153,10 +153,10 @@ def train_kfold_intra(
 
             # get the split dataloaders for this fold
             train_dl = DataLoader(
-                trn, batch_size=batch_size, num_workers=num_workers, shuffle=True
+                trn, batch_size=batch_size, num_workers=num_workers, shuffle=False
             )
             test_dl = DataLoader(
-                tst, batch_size=batch_size, num_workers=num_workers, shuffle=True
+                tst, batch_size=batch_size, num_workers=num_workers, shuffle=False
             )
 
             # instantiate a new instance of the model
