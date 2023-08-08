@@ -53,7 +53,7 @@ class IntrA(Dataset):
                 self.labels = [1] * len(self.paths)
             elif dataset == "classification":
                 for i, cls in enumerate(["vessel", "aneurysm"]):
-                    paths = get_paths(os.path.join(root, dataset, cls, "ad"))
+                    paths = get_paths(os.path.join(root, "generated", cls, "ad"))
                     self.paths += paths
                     self.labels += [i] * len(paths)
                 anno_paths = get_paths(os.path.join(root, "annotated", "ad"))
