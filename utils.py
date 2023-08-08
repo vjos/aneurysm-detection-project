@@ -9,8 +9,8 @@ from models.pointnet import feature_transform_regularizer
 import torch.nn.functional as F
 from tqdm import tqdm
 import mlflow
-from sklearn.model_selection import KFold
 from torch.utils.data import SubsetRandomSampler, DataLoader
+from intra import IntrA
 
 classes = ["vessel", "aneurysm"]
 
@@ -109,50 +109,61 @@ def train_model(
                 )
 
 
-def train_kfold(
+def train_kfold_intra(
     model_class,
     model_kwargs,
-    dataset,
-    folds=5,
     epochs=100,
     batch_size=8,
     num_workers=0,
     norm=False,
     checkpoint_epoch=None,
     model_name="Model",
+    intra_root="./data",
+    npoints=1024,
+    exclude_seg=True,
     snapshot_path="./snapshots",
+    splits="./fileSplits",
 ):
     exp_id = train_setup(model_name, snapshot_path)
     cv_metrics = {}  # used to track cross-validation metrics
 
-    kf = KFold(n_splits=folds, shuffle=True, random_state=0)
     with mlflow.start_run(
-        experiment_id=exp_id, run_name=f"{folds}fold_{model_name}_{epochs}e"
+        experiment_id=exp_id, run_name=f"5fold_{model_name}_{epochs}e"
     ):
-        for fold, (train_ids, test_ids) in enumerate(kf.split(dataset), start=1):
+        for fold in [1, 2, 3, 4, 5]:
             print(f"\nF{fold}:")
+            trn = IntrA(
+                intra_root,
+                npoints=512,
+                exclude_seg=exclude_seg,
+                norm=norm,
+                fold=fold,
+                kfold_splits=splits,
+                test=False,
+            )
+            tst = IntrA(
+                intra_root,
+                npoints=512,
+                exclude_seg=exclude_seg,
+                norm=norm,
+                fold=fold,
+                kfold_splits=splits,
+                test=True,
+            )
+
+            # get the split dataloaders for this fold
+            train_dl = DataLoader(
+                trn, batch_size=batch_size, num_workers=num_workers, shuffle=True
+            )
+            test_dl = DataLoader(
+                tst, batch_size=batch_size, num_workers=num_workers, shuffle=True
+            )
 
             # instantiate a new instance of the model
             model = model_class(**model_kwargs)
             model.to(dev)
             optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
             scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
-
-            # get the split dataloaders for this fold
-            train_srs = SubsetRandomSampler(train_ids)
-            test_srs = SubsetRandomSampler(test_ids)
-            train_dl = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                num_workers=num_workers,
-                sampler=train_srs,
-            )
-            test_dl = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                num_workers=num_workers,
-                sampler=test_srs,
-            )
 
             for epoch in range(1, epochs + 1):
                 print(f"Epoch: {epoch}", end="\r")
@@ -189,7 +200,7 @@ def train_kfold(
         # log the average of each summed metric to mlflow
         for m in cv_metrics:
             for epoch, val in enumerate(cv_metrics[m]):
-                mlflow.log_metric(m, val / folds, step=epoch + 1)
+                mlflow.log_metric(m, val / 5, step=epoch + 1)
 
 
 def run_model(model, pcld, norm=False):

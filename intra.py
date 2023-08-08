@@ -22,6 +22,9 @@ class IntrA(Dataset):
         data_aug=True,
         exclude_seg=False,
         norm=False,
+        fold=1,
+        kfold_splits=None,
+        test=False,
     ):
         root = os.path.expanduser(root)
         self.npoints = npoints
@@ -29,19 +32,38 @@ class IntrA(Dataset):
         self.seg = not exclude_seg
         self.norm = norm
 
-        if dataset == "generated":
-            for i, cls in enumerate(["vessel", "aneurysm"]):
-                paths = self.get_paths(os.path.join(root, dataset, cls, "ad"))
-                self.paths += paths
-                self.labels += [i] * len(paths)
-        elif dataset == "annotated":
-            self.paths = self.get_paths(os.path.join(root, dataset, "ad"))
-            self.labels = [1] * len(self.paths)
-        elif dataset == "complete":
-            self.paths = self.get_paths(os.path.join(root, dataset))
-            self.labels = [0] * len(self.paths)
+        if kfold_splits:
+            if test:
+                self.paths, self.labels = get_split_data(kfold_splits, root, fold)
+            else:
+                train_splits = [1, 2, 3, 4, 5]
+                train_splits.remove(fold)
+                for i in train_splits:
+                    p, l = get_split_data(kfold_splits, root, i)
+                    self.paths += p
+                    self.labels += l
         else:
-            raise IOError(f"Unknown dataset type '{dataset}'.")
+            if dataset == "generated":
+                for i, cls in enumerate(["vessel", "aneurysm"]):
+                    paths = get_paths(os.path.join(root, dataset, cls, "ad"))
+                    self.paths += paths
+                    self.labels += [i] * len(paths)
+            elif dataset == "annotated":
+                self.paths = get_paths(os.path.join(root, dataset, "ad"))
+                self.labels = [1] * len(self.paths)
+            elif dataset == "classification":
+                for i, cls in enumerate(["vessel", "aneurysm"]):
+                    paths = get_paths(os.path.join(root, dataset, cls, "ad"))
+                    self.paths += paths
+                    self.labels += [i] * len(paths)
+                anno_paths = get_paths(os.path.join(root, "annotated", "ad"))
+                self.paths += anno_paths
+                self.labels += [1] * len(anno_paths)
+            elif dataset == "complete":
+                self.paths = get_paths(os.path.join(root, dataset))
+                self.labels = [0] * len(self.paths)
+            else:
+                raise IOError(f"Unknown dataset type '{dataset}'.")
 
     def __getitem__(self, index):
         """Load pointcloud, sample/duplicate to correct npoints, then return with label."""
@@ -55,14 +77,6 @@ class IntrA(Dataset):
 
     def __len__(self):
         return len(self.paths)
-
-    def get_paths(self, dir):
-        """Returns list of full paths of all pointcloud files in a given directory."""
-        return [
-            os.path.join(dir, f)
-            for f in os.listdir(dir)
-            if os.path.splitext(f)[-1] in [".ad", ".obj"]
-        ]
 
 
 def load_pointcloud(file, norm=False, seg=False):
@@ -89,6 +103,39 @@ def load_pointcloud(file, norm=False, seg=False):
         )
     else:
         raise IOError(f"File type {ext} is not supported.")
+
+
+def get_paths(dir):
+    """Returns list of full paths of all pointcloud files in a given directory."""
+    return [
+        os.path.join(dir, f)
+        for f in os.listdir(dir)
+        if os.path.splitext(f)[-1] in [".ad", ".obj"]
+    ]
+
+
+def get_split_data(splits_root, intra_root, fold):
+    """Returns list of full paths of all pointcloud files in the given fold split."""
+    paths = []
+    labels = []
+
+    # get aneurysms
+    counter = 0
+    with open(os.path.join(splits_root, f"ann_clsSplit_{fold-1}.txt")) as F:
+        for line in F:
+            paths.append(os.path.join(intra_root, line.strip()))
+            counter += 1
+    labels = [1] * counter
+
+    # get vessels
+    counter = 0
+    with open(os.path.join(splits_root, f"negSplit_{fold-1}.txt")) as F:
+        for line in F:
+            paths.append(os.path.join(intra_root, line.strip()))
+            counter += 1
+    labels += [0] * counter
+
+    return paths, labels
 
 
 if __name__ == "__main__":
