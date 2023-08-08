@@ -123,13 +123,14 @@ def train_kfold(
     snapshot_path="./snapshots",
 ):
     exp_id = train_setup(model_name, snapshot_path)
+    cv_metrics = {}  # used to track cross-validation metrics
 
     kf = KFold(n_splits=folds, shuffle=True, random_state=0)
     with mlflow.start_run(
         experiment_id=exp_id, run_name=f"{folds}fold_{model_name}_{epochs}e"
     ):
         for fold, (train_ids, test_ids) in enumerate(kf.split(dataset), start=1):
-            print(f"F{fold}")
+            print(f"\nF{fold}:")
 
             # instantiate a new instance of the model
             model = model_class(**model_kwargs)
@@ -165,7 +166,17 @@ def train_kfold(
                     model, test_dl, norm=norm, prefix=f"f{fold}_test_"
                 )
 
-                mlflow.log_metrics(train_metrics | test_metrics, step=epoch)
+                # log all epoch metrics to mlflow
+                full_metrics = train_metrics | test_metrics
+                mlflow.log_metrics(full_metrics, step=epoch)
+
+                # sum metrics across all folds
+                for k, v in full_metrics.items():
+                    m = "_".join(k.split("_")[1:])  # remove fold number from metric
+                    if m not in cv_metrics:
+                        cv_metrics[m] = np.zeros(epochs)
+                    cv_metrics[m][epoch - 1] += v
+
                 if checkpoint_epoch and epoch % checkpoint_epoch == 0:
                     save_checkpoint(
                         model,
@@ -174,6 +185,11 @@ def train_kfold(
                         checkpoint_dict={"epoch": epoch},
                         log=True,
                     )
+
+        # log the average of each summed metric to mlflow
+        for m in cv_metrics:
+            for epoch, val in enumerate(cv_metrics[m]):
+                mlflow.log_metric(m, val / folds, step=epoch + 1)
 
 
 def run_model(model, pcld, norm=False):
