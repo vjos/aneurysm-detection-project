@@ -134,7 +134,7 @@ def train_kfold_intra(
             print(f"\nF{fold}:")
             trn = IntrA(
                 intra_root,
-                npoints=512,
+                npoints=npoints,
                 exclude_seg=exclude_seg,
                 norm=norm,
                 fold=fold,
@@ -143,7 +143,7 @@ def train_kfold_intra(
             )
             tst = IntrA(
                 intra_root,
-                npoints=512,
+                npoints=npoints,
                 exclude_seg=exclude_seg,
                 norm=norm,
                 fold=fold,
