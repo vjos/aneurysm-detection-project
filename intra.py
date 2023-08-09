@@ -4,15 +4,6 @@ import torch
 from torch.utils.data import Dataset
 
 
-""" Todo:
-- train/valid/test sets
-- figure out if the annotated data is a subset of the generated data (it should be)
-- normalise to unit point if necessary
-- implement augmentation: research appropriate pointcloud augmentation techniques
-- aneurysm localisation via pyramid-style segmentation
-"""
-
-
 class IntrA(Dataset):
     def __init__(
         self,

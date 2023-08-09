@@ -27,15 +27,18 @@ def train_step(model, scheduler, optimizer, data, pointconv=False):
     """Train the model once on the given dataset."""
     scheduler.step()
     for i, (pcld, label) in enumerate(data):
-        pcld = pcld.transpose(2, 1)
-        pcld, label = pcld.to(dev), label.to(dev)
         optimizer.zero_grad()
         model = model.train()
+
+        pcld = pcld.transpose(2, 1)
+        pcld, label = pcld.to(dev), label.to(dev)
+
         if pointconv:
             # works for pointconv
             pred = model(pcld[:, :3, :], pcld[:, 3:, :])
         else:
             pred = model(pcld)[0]
+
         loss = F.nll_loss(pred, label)
 
         # if feat_trans:
@@ -91,11 +94,11 @@ def train_model(
             train_step(model, scheduler, optimizer, train, pointconv=pointconv)
 
             train_metrics = eval_model_classification(
-                model, train, norm=norm, prefix="train_"
+                model, train, norm=norm, pointconv=pointconv, prefix="train_"
             )
 
             test_metrics = eval_model_classification(
-                model, test, norm=norm, prefix="test_"
+                model, test, norm=norm, pointconv=pointconv, prefix="test_"
             )
 
             mlflow.log_metrics(train_metrics | test_metrics, step=epoch)
@@ -206,12 +209,12 @@ def train_kfold_intra(
                 mlflow.log_metric(m, val / 5, step=epoch + 1)
 
 
-def run_model(model, pcld, norm=False):
+def run_model(model, pcld, pointconv=False):
     """Returns the predictions generated from the model on the given batch."""
     pcld = pcld.transpose(2, 1)
     pcld = pcld.to(dev)
 
-    if norm:
+    if pointconv:
         pred = model(pcld[:, :3, :], pcld[:, 3:, :])
     else:
         pred = model(pcld)[0]
@@ -219,7 +222,7 @@ def run_model(model, pcld, norm=False):
     return pred.data.max(1)[1]
 
 
-def eval_model_classification(model, data, prefix="", norm=False):
+def eval_model_classification(model, data, prefix="", norm=False, pointconv=False):
     """Returns dictionary of appropriate metrics calculated by running the model on labelled data."""
     TP = N = 0
     total_classes, correct_classes = {}, {}
@@ -229,7 +232,7 @@ def eval_model_classification(model, data, prefix="", norm=False):
         label = label.to(dev)
 
         # generate predictions on batch and check prediction equality to groundtruths
-        correct = run_model(model, pcld, norm=norm).eq(label.data)
+        correct = run_model(model, pcld, pointconv=False).eq(label.data)
 
         # sum TPs and total occurences for each class in the batch
         for c, l in zip(correct, label):
