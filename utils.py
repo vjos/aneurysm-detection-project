@@ -23,7 +23,7 @@ dev = (
 )
 
 
-def train_step(model, scheduler, optimizer, data, norm=False):
+def train_step(model, scheduler, optimizer, data, pointconv=False):
     """Train the model once on the given dataset."""
     scheduler.step()
     for i, (pcld, label) in enumerate(data):
@@ -31,7 +31,8 @@ def train_step(model, scheduler, optimizer, data, norm=False):
         pcld, label = pcld.to(dev), label.to(dev)
         optimizer.zero_grad()
         model = model.train()
-        if norm:
+        if pointconv:
+            # works for pointconv
             pred = model(pcld[:, :3, :], pcld[:, 3:, :])
         else:
             pred = model(pcld)[0]
@@ -77,6 +78,7 @@ def train_model(
     model_name="model",
     snapshot_path="./snapshots",
     norm=False,
+    pointconv=False,
 ):
     model.to(dev)
     optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
@@ -86,7 +88,7 @@ def train_model(
 
     with mlflow.start_run(experiment_id=exp_id):
         for epoch in range(1, epochs + 1):
-            train_step(model, scheduler, optimizer, train, norm=norm)
+            train_step(model, scheduler, optimizer, train, pointconv=pointconv)
 
             train_metrics = eval_model_classification(
                 model, train, norm=norm, prefix="train_"
@@ -116,6 +118,7 @@ def train_kfold_intra(
     batch_size=8,
     num_workers=0,
     norm=False,
+    pointconv=False,
     checkpoint_epoch=None,
     model_name="Model",
     intra_root="./data",
@@ -167,7 +170,7 @@ def train_kfold_intra(
 
             for epoch in range(1, epochs + 1):
                 print(f"Epoch: {epoch}", end="\r")
-                train_step(model, scheduler, optimizer, train_dl, norm=norm)
+                train_step(model, scheduler, optimizer, train_dl, pointconv=pointconv)
 
                 train_metrics = eval_model_classification(
                     model, train_dl, norm=norm, prefix=f"f{fold}_train_"
