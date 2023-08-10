@@ -11,6 +11,7 @@ from tqdm import tqdm
 import mlflow
 from torch.utils.data import SubsetRandomSampler, DataLoader
 from intra import IntrA
+from augmentation import pcld_dropout, pcld_shift, pcld_scale
 
 classes = ["vessel", "aneurysm"]
 
@@ -23,21 +24,31 @@ dev = (
 )
 
 
-def train_step(model, scheduler, optimizer, data, pointconv=False):
+def train_step(model, scheduler, optimizer, data, pointconv=False, augment_data=True):
     """Train the model once on the given dataset."""
     scheduler.step()
-    for i, (pcld, label) in enumerate(data):
+    for batch, label in data:
         optimizer.zero_grad()
         model = model.train()
 
-        pcld = pcld.transpose(2, 1)
-        pcld, label = pcld.to(dev), label.to(dev)
+        if augment_data:
+            # random dropout
+            batch = pcld_dropout(batch.data.numpy())
+
+            # scale and shift (wouldn't affect norm)
+            batch[:, :, 0:3] = pcld_shift(pcld_scale(batch[:, :, 0:3]))
+
+            batch = torch.Tensor(batch)
+
+        # prepare batch for model
+        batch = batch.transpose(2, 1)
+        batch, label = batch.to(dev), label.to(dev)
 
         if pointconv:
             # works for pointconv
-            pred = model(pcld[:, :3, :], pcld[:, 3:, :])
+            pred = model(batch[:, :3, :], batch[:, 3:, :])
         else:
-            pred = model(pcld)[0]
+            pred = model(batch)[0]
 
         loss = F.nll_loss(pred, label)
         loss.backward()
@@ -78,6 +89,7 @@ def train_model(
     snapshot_path="./snapshots",
     norm=False,
     pointconv=False,
+    augment_data=True,
 ):
     model.to(dev)
     optimizer = optim.Adam(
@@ -89,7 +101,14 @@ def train_model(
 
     with mlflow.start_run(experiment_id=exp_id):
         for epoch in range(1, epochs + 1):
-            train_step(model, scheduler, optimizer, train, pointconv=pointconv)
+            train_step(
+                model,
+                scheduler,
+                optimizer,
+                train,
+                pointconv=pointconv,
+                augment_data=augment_data,
+            )
 
             train_metrics = eval_model_classification(
                 model, train, norm=norm, pointconv=pointconv, prefix="train_"
@@ -127,6 +146,7 @@ def train_kfold_intra(
     exclude_seg=True,
     snapshot_path="./snapshots",
     splits="./fileSplits",
+    augment_data=True,
 ):
     exp_id = train_setup(model_name, snapshot_path)
     cv_metrics = {}  # used to track cross-validation metrics
@@ -173,7 +193,14 @@ def train_kfold_intra(
 
             for epoch in range(1, epochs + 1):
                 print(f"Epoch: {epoch}", end="\r")
-                train_step(model, scheduler, optimizer, train_dl, pointconv=pointconv)
+                train_step(
+                    model,
+                    scheduler,
+                    optimizer,
+                    train_dl,
+                    pointconv=pointconv,
+                    augment_data=augment_data,
+                )
 
                 train_metrics = eval_model_classification(
                     model, train_dl, norm=norm, prefix=f"f{fold}_train_"

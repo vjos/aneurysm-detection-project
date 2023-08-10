@@ -10,7 +10,6 @@ class IntrA(Dataset):
         root,
         dataset="generated",
         npoints=2048,
-        data_aug=True,
         exclude_seg=False,
         norm=False,
         fold=1,
