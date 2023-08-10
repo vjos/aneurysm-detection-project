@@ -12,6 +12,7 @@ import mlflow
 from torch.utils.data import SubsetRandomSampler, DataLoader
 from intra import IntrA
 from augmentation import pcld_dropout, pcld_shift, pcld_scale
+from models.pointnetcls import get_loss
 
 classes = ["vessel", "aneurysm"]
 
@@ -27,6 +28,7 @@ dev = (
 def train_step(model, scheduler, optimizer, data, pointconv=False, augment_data=True):
     """Train the model once on the given dataset."""
     scheduler.step()
+    loss_fn = get_loss()
     for batch, label in data:
         optimizer.zero_grad()
         model = model.train()
@@ -48,9 +50,10 @@ def train_step(model, scheduler, optimizer, data, pointconv=False, augment_data=
             # works for pointconv
             pred = model(batch[:, :3, :], batch[:, 3:, :])
         else:
-            pred = model(batch)[0]
+            pred, trans_feat = model(batch)
 
-        loss = F.nll_loss(pred, label)
+        # loss = F.nll_loss(pred, label)
+        loss = loss_fn(pred, label, trans_feat)
         loss.backward()
         optimizer.step()
 
