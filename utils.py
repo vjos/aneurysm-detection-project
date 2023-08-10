@@ -262,7 +262,7 @@ def eval_model_classification(model, data, prefix="", norm=False, pointconv=Fals
         label = label.to(dev)
 
         # generate predictions on batch and check prediction equality to groundtruths
-        correct = run_model(model, pcld, pointconv=False).eq(label.data)
+        correct = run_model(model, pcld, pointconv=pointconv).eq(label.data)
 
         # sum TPs and total occurences for each class in the batch
         for c, l in zip(correct, label):
