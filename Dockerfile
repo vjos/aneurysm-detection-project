@@ -6,5 +6,5 @@ RUN mkdir -p /data/annotated/
 COPY ./requirements.txt /tmp/
 RUN pip install -r /tmp/requirements.txt
 
-COPY ./data/generated/ /data/generated
 COPY ./data/annotated/ /data/annotated
+COPY ./data/generated/ /data/generated
