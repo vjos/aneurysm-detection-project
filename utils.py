@@ -40,10 +40,6 @@ def train_step(model, scheduler, optimizer, data, pointconv=False):
             pred = model(pcld)[0]
 
         loss = F.nll_loss(pred, label)
-
-        # if feat_trans:
-        #     loss += feature_transform_regularizer(trans_feat) * 0.001
-
         loss.backward()
         optimizer.step()
 
@@ -84,8 +80,10 @@ def train_model(
     pointconv=False,
 ):
     model.to(dev)
-    optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+    optimizer = optim.Adam(
+        model.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4
+    )
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
     exp_id = train_setup(model_name, snapshot_path)
 
@@ -159,7 +157,7 @@ def train_kfold_intra(
 
             # get the split dataloaders for this fold
             train_dl = DataLoader(
-                trn, batch_size=batch_size, num_workers=num_workers, shuffle=False
+                trn, batch_size=batch_size, num_workers=num_workers, shuffle=True
             )
             test_dl = DataLoader(
                 tst, batch_size=batch_size, num_workers=num_workers, shuffle=False
@@ -168,8 +166,10 @@ def train_kfold_intra(
             # instantiate a new instance of the model
             model = model_class(**model_kwargs)
             model.to(dev)
-            optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
-            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+            optimizer = optim.Adam(
+                model.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4
+            )
+            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
             for epoch in range(1, epochs + 1):
                 print(f"Epoch: {epoch}", end="\r")
