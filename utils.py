@@ -53,7 +53,7 @@ def train_step(
             pred, trans_feat = model(batch)
             loss = loss_fn(pred, label, trans_feat)
         else:
-            pred = model(batch)
+            pred = model(batch)[0]
             loss = loss_fn(pred, label)
 
         loss.backward()
@@ -114,7 +114,7 @@ def train_model(
     if sched == "step":
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
     else:
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, epochs, eta_min=lr)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, eta_min=lr)
 
     exp_id = train_setup(model_name, snapshot_path)
     with mlflow.start_run(experiment_id=exp_id):
