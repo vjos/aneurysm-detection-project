@@ -93,17 +93,30 @@ def train_model(
     epochs=100,
     checkpoint_epoch=10,
     model_name="model",
+    opt="adam",
+    sched="step",
+    lr=0.001,
+    momentum=0.9,
     snapshot_path="./snapshots",
     trans_loss=False,
 ):
     model.to(dev)
-    optimizer = optim.Adam(
-        model.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4
-    )
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
+
+    if opt == "sgd":
+        optimizer = optim.SGD(
+            model.parameters(), lr=lr * 100, momentum=momentum, weight_decay=1e-4
+        )
+    else:
+        optimizer = optim.Adam(
+            model.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4
+        )
+
+    if sched == "step":
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
+    else:
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, epochs, eta_min=lr)
 
     exp_id = train_setup(model_name, snapshot_path)
-
     with mlflow.start_run(experiment_id=exp_id):
         mlflow.log_params({x: str(y) for x, y in locals().items() if x != "model"})
         for epoch in range(1, epochs + 1):
