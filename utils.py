@@ -11,10 +11,9 @@ from tqdm import tqdm
 import mlflow
 from torch.utils.data import SubsetRandomSampler, DataLoader
 from intra import IntrA
-from augmentation import pcld_dropout, pcld_shift, pcld_scale
-from models.pointnetcls import get_loss
 
 classes = ["vessel", "aneurysm"]
+
 
 dev = (
     "cuda"
@@ -25,35 +24,38 @@ dev = (
 )
 
 
-def train_step(model, scheduler, optimizer, data, pointconv=False, augment_data=True):
+def train_step(
+    model,
+    scheduler,
+    optimizer,
+    data,
+    loss_fn=F.nll_loss,
+    aug=None,
+    trans_loss=False,
+):
     """Train the model once on the given dataset."""
     scheduler.step()
-    loss_fn = get_loss()
+
     for batch, label in data:
         optimizer.zero_grad()
         model = model.train()
 
-        if augment_data:
-            # random dropout
-            batch = pcld_dropout(batch.data.numpy())
+        # apply data augmentation
+        if aug:
+            batch = aug(batch)
 
-            # scale and shift (wouldn't affect norm)
-            batch[:, :, 0:3] = pcld_shift(pcld_scale(batch[:, :, 0:3]))
-
-            batch = torch.Tensor(batch)
-
-        # prepare batch for model
+        # prepare data for model
         batch = batch.transpose(2, 1)
         batch, label = batch.to(dev), label.to(dev)
 
-        if pointconv:
-            # works for pointconv
-            pred = model(batch[:, :3, :], batch[:, 3:, :])
-        else:
+        # calculate model loss
+        if trans_loss:
             pred, trans_feat = model(batch)
+            loss = loss_fn(pred, label, trans_feat)
+        else:
+            pred = model(batch)
+            loss = loss_fn(pred, label)
 
-        # loss = F.nll_loss(pred, label)
-        loss = loss_fn(pred, label, trans_feat)
         loss.backward()
         optimizer.step()
 
@@ -86,13 +88,13 @@ def train_model(
     model,
     train,
     test,
+    loss_fn,
+    aug,
     epochs=100,
     checkpoint_epoch=10,
     model_name="model",
     snapshot_path="./snapshots",
-    norm=False,
-    pointconv=False,
-    augment_data=True,
+    trans_loss=False,
 ):
     model.to(dev)
     optimizer = optim.Adam(
@@ -103,23 +105,21 @@ def train_model(
     exp_id = train_setup(model_name, snapshot_path)
 
     with mlflow.start_run(experiment_id=exp_id):
+        mlflow.log_params({x: str(y) for x, y in locals().items() if x != "model"})
         for epoch in range(1, epochs + 1):
             train_step(
                 model,
                 scheduler,
                 optimizer,
                 train,
-                pointconv=pointconv,
-                augment_data=augment_data,
+                loss_fn=loss_fn,
+                aug=aug,
+                trans_loss=trans_loss,
             )
 
-            train_metrics = eval_model_classification(
-                model, train, norm=norm, pointconv=pointconv, prefix="train_"
-            )
+            train_metrics = eval_model_classification(model, train, prefix="train_")
 
-            test_metrics = eval_model_classification(
-                model, test, norm=norm, pointconv=pointconv, prefix="test_"
-            )
+            test_metrics = eval_model_classification(model, test, prefix="test_")
 
             mlflow.log_metrics(train_metrics | test_metrics, step=epoch)
 
@@ -141,7 +141,6 @@ def train_kfold_intra(
     batch_size=8,
     num_workers=0,
     norm=False,
-    pointconv=False,
     checkpoint_epoch=None,
     model_name="Model",
     intra_root="./data",
@@ -149,7 +148,9 @@ def train_kfold_intra(
     exclude_seg=True,
     snapshot_path="./snapshots",
     splits="./fileSplits",
-    augment_data=True,
+    loss_fn=F.nll_loss,
+    aug=None,
+    trans_loss=False,
 ):
     exp_id = train_setup(model_name, snapshot_path)
     cv_metrics = {}  # used to track cross-validation metrics
@@ -157,6 +158,7 @@ def train_kfold_intra(
     with mlflow.start_run(
         experiment_id=exp_id, run_name=f"5fold_{model_name}_{epochs}e_bs{batch_size}"
     ):
+        mlflow.log_params({x: str(y) for x, y in locals().items() if x != "model"})
         for fold in [1, 2, 3, 4, 5]:
             print(f"\nF{fold}:")
             trn = IntrA(
@@ -201,16 +203,17 @@ def train_kfold_intra(
                     scheduler,
                     optimizer,
                     train_dl,
-                    pointconv=pointconv,
-                    augment_data=augment_data,
+                    loss_fn=loss_fn,
+                    aug=aug,
+                    trans_loss=trans_loss,
                 )
 
                 train_metrics = eval_model_classification(
-                    model, train_dl, norm=norm, prefix=f"f{fold}_train_"
+                    model, train_dl, prefix=f"f{fold}_train_"
                 )
 
                 test_metrics = eval_model_classification(
-                    model, test_dl, norm=norm, prefix=f"f{fold}_test_"
+                    model, test_dl, prefix=f"f{fold}_test_"
                 )
 
                 # log all epoch metrics to mlflow
@@ -239,20 +242,15 @@ def train_kfold_intra(
                 mlflow.log_metric(m, val / 5, step=epoch + 1)
 
 
-def run_model(model, pcld, pointconv=False):
+def run_model(model, batch):
     """Returns the predictions generated from the model on the given batch."""
-    pcld = pcld.transpose(2, 1)
-    pcld = pcld.to(dev)
-
-    if pointconv:
-        pred = model(pcld[:, :3, :], pcld[:, 3:, :])
-    else:
-        pred = model(pcld)[0]
-
+    batch = batch.transpose(2, 1)
+    batch = batch.to(dev)
+    pred = model(batch)[0]
     return pred.data.max(1)[1]
 
 
-def eval_model_classification(model, data, prefix="", norm=False, pointconv=False):
+def eval_model_classification(model, data, prefix=""):
     """Returns dictionary of appropriate metrics calculated by running the model on labelled data."""
     TP = N = 0
     total_classes, correct_classes = {}, {}
@@ -262,7 +260,7 @@ def eval_model_classification(model, data, prefix="", norm=False, pointconv=Fals
         label = label.to(dev)
 
         # generate predictions on batch and check prediction equality to groundtruths
-        correct = run_model(model, pcld, pointconv=pointconv).eq(label.data)
+        correct = run_model(model, pcld).eq(label.data)
 
         # sum TPs and total occurences for each class in the batch
         for c, l in zip(correct, label):
