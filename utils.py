@@ -108,7 +108,7 @@ def train_model(
         )
     else:
         optimizer = optim.Adam(
-            model.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4
+            model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-4
         )
 
     if sched == "step":
