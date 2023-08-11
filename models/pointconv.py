@@ -46,7 +46,8 @@ class PointConvDensityClsSsg(nn.Module):
         self.drop2 = nn.Dropout(0.7)
         self.fc3 = nn.Linear(256, num_classes)
 
-    def forward(self, xyz, feat):
+    def forward(self, batch):
+        xyz, feat = batch[:, :3, :], batch[:, 3:, :]
         B, _, _ = xyz.shape
         l1_xyz, l1_points = self.sa1(xyz, feat)
         l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)
@@ -56,7 +57,7 @@ class PointConvDensityClsSsg(nn.Module):
         x = self.drop2(F.relu(self.bn2(self.fc2(x))))
         x = self.fc3(x)
         x = F.log_softmax(x, -1)
-        return x
+        return (x,)
 
 
 if __name__ == "__main__":
