@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 def pcld_dropout(batch, max_dropout=0.85):
@@ -47,6 +48,23 @@ def pcld_scale(batch, scale_range=(0.8, 1.2)):
         batch[i, :, :] *= scales[i]
 
     return batch
+
+
+def aug_pointnet(batch):
+    """Applies dropout then scale and shift on (x,y,z)."""
+    # random dropout
+    batch = pcld_dropout(batch.data.numpy())
+    # scale and shift (wouldn't affect norm)
+    batch[:, :, 0:3] = pcld_shift(pcld_scale(batch[:, :, 0:3]))
+    return torch.Tensor(batch)
+
+
+def aug_dgcnn(batch):
+    """Only shuffles each pointcloud. Original uses translation but paper omits; tensorflow uses jitter but pytorch omits."""
+    batch = batch.data.numpy()
+    for pcld in batch:
+        np.random.shuffle(pcld)
+    return torch.Tensor(batch)
 
 
 """
