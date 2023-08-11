@@ -114,4 +114,4 @@ class DGCNN(nn.Module):
         x = F.leaky_relu(self.bn7(self.linear2(x)), negative_slope=0.2)
         x = self.dp2(x)
         x = self.linear3(x)
-        return x, _
+        return (x,)
