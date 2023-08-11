@@ -285,40 +285,53 @@ def run_model(model, batch):
 
 def eval_model_classification(model, data, prefix=""):
     """Returns dictionary of appropriate metrics calculated by running the model on labelled data."""
-    TP = N = 0
-    total_classes, correct_classes = {}, {}
+    total_classes, tp_classes, fp_classes = {}, {}, {}
     model.eval()
 
     for pcld, label in data:
         label = label.to(dev)
 
         # generate predictions on batch and check prediction equality to groundtruths
-        correct = run_model(model, pcld).eq(label.data)
+        pred = run_model(model, pcld)
 
         # sum TPs and total occurences for each class in the batch
-        for c, l in zip(correct, label):
-            c, l = c.item(), l.item()
+        for p, l in zip(pred, label):
+            p, l = p.item(), l.item()
 
-            # add class labels to the dicts
             if l not in total_classes:
                 total_classes[l] = 0
-            if l not in correct_classes:
-                correct_classes[l] = 0
+            if l not in tp_classes:
+                tp_classes[l] = 0
+            if l not in fp_classes:
+                fp_classes[l] = 0
 
-            correct_classes[l] += c
             total_classes[l] += 1
-
-        TP += correct.cpu().sum().item()
-        N += pcld.size()[0]
+            if p == l:
+                tp_classes[l] += 1
+            else:
+                fp_classes[p] += 1
 
     model.train()
+
+    ves_rec = tp_classes[0] / total_classes[0] if total_classes[0] else 0
+    an_rec = tp_classes[1] / total_classes[1] if total_classes[1] else 0
+    avg_rec = (ves_rec + an_rec) / 2
+    ves_preds = tp_classes[0] + fp_classes[0]
+    ves_pres = tp_classes[0] / ves_preds if ves_preds else 0
+    an_preds = tp_classes[1] + fp_classes[1]
+    an_pres = tp_classes[1] / an_preds if an_preds else 0
+    avg_pres = (ves_pres + an_pres) / 2
 
     # return dictionary of metrics with prefix prepended to each
     return {
         f"{prefix}{m}": val
         for (m, val) in {
-            "acc": TP / float(N),
-            "vessel_recall": correct_classes[0] / total_classes[0],
-            "aneurysm_recall": correct_classes[1] / total_classes[1],
+            "vessel_recall": ves_rec,
+            "aneurysm_recall": an_rec,
+            "avg_recall": avg_rec,
+            "vessel_precision": ves_pres,
+            "aneurysm_precision": an_pres,
+            "avg_precision": avg_pres,
+            "f1": (2 * avg_rec * avg_pres) / (avg_rec + avg_pres),
         }.items()
     }
