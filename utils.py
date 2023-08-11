@@ -285,7 +285,11 @@ def run_model(model, batch):
 
 def eval_model_classification(model, data, prefix=""):
     """Returns dictionary of appropriate metrics calculated by running the model on labelled data."""
-    total_classes, tp_classes, fp_classes = {}, {}, {}
+
+    def class_dict(n):
+        return {i: 0 for i in range(n)}
+
+    total_classes, tp_classes, fp_classes = class_dict(2), class_dict(2), class_dict(2)
     model.eval()
 
     for pcld, label in data:
@@ -297,13 +301,6 @@ def eval_model_classification(model, data, prefix=""):
         # sum TPs and total occurences for each class in the batch
         for p, l in zip(pred, label):
             p, l = p.item(), l.item()
-
-            if l not in total_classes:
-                total_classes[l] = 0
-            if l not in tp_classes:
-                tp_classes[l] = 0
-            if l not in fp_classes:
-                fp_classes[l] = 0
 
             total_classes[l] += 1
             if p == l:
