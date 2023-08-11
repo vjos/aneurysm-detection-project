@@ -150,6 +150,12 @@ def train_model(
 def train_kfold_intra(
     model_class,
     model_kwargs,
+    loss_fn,
+    aug,
+    opt="adam",
+    sched="step",
+    lr=0.001,
+    momentum=0.9,
     epochs=100,
     batch_size=8,
     num_workers=0,
@@ -161,8 +167,6 @@ def train_kfold_intra(
     exclude_seg=True,
     snapshot_path="./snapshots",
     splits="./fileSplits",
-    loss_fn=F.nll_loss,
-    aug=None,
     trans_loss=False,
 ):
     exp_id = train_setup(model_name, snapshot_path)
@@ -204,10 +208,26 @@ def train_kfold_intra(
             # instantiate a new instance of the model
             model = model_class(**model_kwargs)
             model.to(dev)
-            optimizer = optim.Adam(
-                model.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4
-            )
-            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
+            if opt == "sgd":
+                optimizer = optim.SGD(
+                    model.parameters(),
+                    lr=lr * 100,
+                    momentum=momentum,
+                    weight_decay=1e-4,
+                )
+            else:
+                optimizer = optim.Adam(
+                    model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-4
+                )
+
+            if sched == "step":
+                scheduler = optim.lr_scheduler.StepLR(
+                    optimizer, step_size=20, gamma=0.7
+                )
+            else:
+                scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer, epochs, eta_min=lr
+                )
 
             for epoch in range(1, epochs + 1):
                 print(f"Epoch: {epoch}", end="\r")
