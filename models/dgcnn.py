@@ -3,6 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+dev = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
+)
+
+
 def knn(x, k):
     inner = -2 * torch.matmul(x.transpose(2, 1), x)
     xx = torch.sum(x**2, dim=1, keepdim=True)
@@ -18,9 +27,7 @@ def get_graph_feature(x, k=20, idx=None):
     x = x.view(batch_size, -1, num_points)
     if idx is None:
         idx = knn(x, k=k)  # (batch_size, num_points, k)
-    device = torch.device("cuda")
-
-    idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1) * num_points
+    idx_base = torch.arange(0, batch_size, device=dev).view(-1, 1, 1) * num_points
 
     idx = idx + idx_base
 
@@ -41,7 +48,9 @@ def get_graph_feature(x, k=20, idx=None):
 
 
 class DGCNN(nn.Module):
-    def __init__(self, knns=20, emb_dims=1024, dropout=0.5, output_channels=40):
+    def __init__(
+        self, knns=20, emb_dims=1024, dropout=0.5, output_channels=40, norm=False
+    ):
         super(DGCNN, self).__init__()
         self.k = knns
 
@@ -51,8 +60,12 @@ class DGCNN(nn.Module):
         self.bn4 = nn.BatchNorm2d(256)
         self.bn5 = nn.BatchNorm1d(emb_dims)
 
+        if norm:
+            indims = 12
+        else:
+            indims = 6
         self.conv1 = nn.Sequential(
-            nn.Conv2d(6, 64, kernel_size=1, bias=False),
+            nn.Conv2d(indims, 64, kernel_size=1, bias=False),
             self.bn1,
             nn.LeakyReLU(negative_slope=0.2),
         )
