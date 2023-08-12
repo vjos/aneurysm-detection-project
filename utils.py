@@ -35,7 +35,6 @@ def train_step(
 ):
     """Train the model once on the given dataset."""
     model = model.train()
-    scheduler.step()
 
     for batch, label in data:
         optimizer.zero_grad()
@@ -59,6 +58,7 @@ def train_step(
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
+    scheduler.step()
 
 
 def save_checkpoint(model, snapshot_path, filename, checkpoint_dict={}, log=False):
