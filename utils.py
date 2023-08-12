@@ -34,11 +34,11 @@ def train_step(
     trans_loss=False,
 ):
     """Train the model once on the given dataset."""
+    model = model.train()
     scheduler.step()
 
     for batch, label in data:
         optimizer.zero_grad()
-        model = model.train()
 
         # apply data augmentation
         if aug:
@@ -57,6 +57,7 @@ def train_step(
             loss = loss_fn(pred, label)
 
         loss.backward()
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
 
 
@@ -97,6 +98,7 @@ def train_model(
     sched="step",
     lr=0.001,
     momentum=0.9,
+    weight_decay=2e-4,
     snapshot_path="./snapshots",
     trans_loss=False,
 ):
@@ -104,17 +106,22 @@ def train_model(
 
     if opt == "sgd":
         optimizer = optim.SGD(
-            model.parameters(), lr=lr * 100, momentum=momentum, weight_decay=1e-4
+            model.parameters(),
+            lr=lr * 100,
+            momentum=momentum,
+            weight_decay=weight_decay,
         )
     else:
         optimizer = optim.Adam(
-            model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=1e-4
+            model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=weight_decay
         )
 
     if sched == "step":
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
     else:
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, eta_min=lr)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, epochs, eta_min=min_lr, last_epoch=
+        )
 
     exp_id = train_setup(model_name, snapshot_path)
     with mlflow.start_run(experiment_id=exp_id):
@@ -226,7 +233,7 @@ def train_kfold_intra(
                 )
             else:
                 scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                    optimizer, epochs, eta_min=lr
+                    optimizer, epochs, eta_min=lr, start_epoch=-1
                 )
 
             for epoch in range(1, epochs + 1):
