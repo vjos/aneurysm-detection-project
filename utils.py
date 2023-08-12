@@ -35,6 +35,7 @@ def train_step(
 ):
     """Train the model once on the given dataset."""
     model = model.train()
+    total_loss = 0
 
     for batch, label in data:
         optimizer.zero_grad()
@@ -55,10 +56,12 @@ def train_step(
             pred = model(batch)[0]
             loss = loss_fn(pred, label)
 
+        total_loss += loss
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
     scheduler.step()
+    return total_loss / len(data)
 
 
 def save_checkpoint(model, snapshot_path, filename, checkpoint_dict={}, log=False):
@@ -128,7 +131,7 @@ def train_model(
     with mlflow.start_run(experiment_id=exp_id):
         mlflow.log_params({x: str(y) for x, y in locals().items() if x != "model"})
         for epoch in range(1, epochs + 1):
-            train_step(
+            train_loss = train_step(
                 model,
                 scheduler,
                 optimizer,
@@ -137,11 +140,10 @@ def train_model(
                 aug=aug,
                 trans_loss=trans_loss,
             )
-
+            mlflow.log_metric("train_loss", train_loss, step=epoch)
+            mlflow.log_metric("lr", scheduler.get_last_lr()[0])
             train_metrics = eval_model_classification(model, train, prefix="train_")
-
             test_metrics = eval_model_classification(model, test, prefix="test_")
-
             mlflow.log_metrics(train_metrics | test_metrics, step=epoch)
 
             # save model checkpoint at the given epochs
