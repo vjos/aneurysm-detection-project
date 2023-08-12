@@ -97,6 +97,7 @@ def train_model(
     opt="adam",
     sched="step",
     lr=0.001,
+    min_lr=0.001,
     momentum=0.9,
     weight_decay=2e-4,
     snapshot_path="./snapshots",
@@ -120,7 +121,7 @@ def train_model(
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
     else:
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, epochs, eta_min=min_lr, last_epoch=
+            optimizer, epochs, eta_min=min_lr, last_epoch=-1
         )
 
     exp_id = train_setup(model_name, snapshot_path)
