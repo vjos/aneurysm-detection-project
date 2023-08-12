@@ -111,7 +111,7 @@ def train_model(
     if opt == "sgd":
         optimizer = optim.SGD(
             model.parameters(),
-            lr=lr * 100,
+            lr=lr,
             momentum=momentum,
             weight_decay=weight_decay,
         )
@@ -141,7 +141,7 @@ def train_model(
                 trans_loss=trans_loss,
             )
             mlflow.log_metric("train_loss", train_loss, step=epoch)
-            mlflow.log_metric("lr", scheduler.get_last_lr()[0])
+            mlflow.log_metric("lr", scheduler.get_last_lr()[0], step=epoch)
             train_metrics = eval_model_classification(model, train, prefix="train_")
             test_metrics = eval_model_classification(model, test, prefix="test_")
             mlflow.log_metrics(train_metrics | test_metrics, step=epoch)
