@@ -468,7 +468,7 @@ class Model(nn.Module):
 
         x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)
         x = self.classifier(x)
-        return x
+        return (x,)
 
 
 def pointMLP(num_classes=2, **kwargs) -> Model:
