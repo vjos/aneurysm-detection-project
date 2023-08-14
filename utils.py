@@ -5,11 +5,10 @@ import torch
 import torch.nn.parallel
 import torch.optim as optim
 import torch.utils.data
-from models.pointnet import feature_transform_regularizer
 import torch.nn.functional as F
 from tqdm import tqdm
 import mlflow
-from torch.utils.data import SubsetRandomSampler, DataLoader
+from torch.utils.data import DataLoader
 from intra import IntrA
 
 classes = ["vessel", "aneurysm"]
