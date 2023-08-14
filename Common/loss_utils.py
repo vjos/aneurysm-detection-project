@@ -10,7 +10,6 @@
 """
 
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -50,24 +49,24 @@ def mat_loss(trans):
     return loss
 
 
-def cls_loss(pred, pred_aug, gold, pc_tran, aug_tran, pc_feat, aug_feat):
+def cls_loss(pred, pred_aug, gold):
     """Calculate cross entropy loss, apply label smoothing if needed."""
     mse_fn = torch.nn.MSELoss(reduce=True, size_average=True)
 
-    cls_pc, _ = cal_loss_raw(pred, gold)
-    cls_aug, _ = cal_loss_raw(pred_aug, gold)
+    cls_pc, cls_pc_raw = cal_loss_raw(pred, gold)
+    cls_aug, cls_aug_raw = cal_loss_raw(pred_aug, gold)
 
-    feat_diff = 10.0 * mse_fn(pc_feat, aug_feat)
     parameters = torch.max(
         torch.tensor(NUM).cuda(), torch.exp(1.0 - cls_pc_raw) ** 2
     ).cuda()
+
     cls_diff = (torch.abs(cls_pc_raw - cls_aug_raw) * (parameters * 2)).mean()
-    cls_loss = cls_pc + cls_aug + feat_diff  # + cls_diff
+    cls_loss = cls_pc + cls_aug + cls_diff
 
     return cls_loss
 
 
-def aug_loss(pred, pred_aug, gold, pc_tran, aug_tran):
+def aug_loss(pred, pred_aug, gold):
     """Calculate cross entropy loss, apply label smoothing if needed."""
     mse_fn = torch.nn.MSELoss(reduce=True, size_average=True)
 

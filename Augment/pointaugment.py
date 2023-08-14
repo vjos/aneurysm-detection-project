@@ -4,7 +4,6 @@ import torch.utils.data
 import numpy as np
 import sklearn.metrics as metrics
 
-from Augment.augmentor import Augmentor
 import Common.data_utils as d_utils
 from Common import loss_utils
 
@@ -51,11 +50,11 @@ class PointAugmentation:
         PointcloudScaleAndTranslate = d_utils.PointcloudScaleAndTranslate()
 
         for epoch in range(epochs):
-            for batch, label in enumerate(train):
+            for batch, label in train:
                 batch, label = batch.to(dev), label.to(dev)
-                batch = batch.transpose(2, 1).contiguous()
 
                 batch = PointcloudScaleAndTranslate(batch)
+                batch = batch.transpose(2, 1).contiguous()
 
                 noise = 0.02 * torch.randn(batch.size()[0], 1024).to(dev)
 
@@ -64,12 +63,10 @@ class PointAugmentation:
                 optimizer_a.zero_grad()
                 aug_pc = augmentor(batch, noise)
 
-                pred_pc, pc_tran, pc_feat = classifier(batch)
-                pred_aug, aug_tran, aug_feat = classifier(aug_pc)
+                pred_pc = classifier(batch)[0]
+                pred_aug = classifier(aug_pc)[0]
 
-                augLoss = loss_utils.aug_loss(
-                    pred_pc, pred_aug, label, pc_tran, aug_tran
-                )
+                augLoss = loss_utils.aug_loss(pred_pc, pred_aug, label)
 
                 augLoss.backward(retain_graph=True)
                 optimizer_a.step()
@@ -79,10 +76,6 @@ class PointAugmentation:
                     pred_pc,
                     pred_aug,
                     label,
-                    pc_tran,
-                    aug_tran,
-                    pc_feat,
-                    aug_feat,
                 )
                 clsLoss.backward(retain_graph=True)
                 optimizer_c.step()
@@ -90,11 +83,11 @@ class PointAugmentation:
             train_acc = self.eval_one_epoch(classifier.eval(), train)
             test_acc = self.eval_one_epoch(classifier.eval(), test)
 
-            self.log_string("CLS Loss: %.2f" % clsLoss.data)
-            self.log_string("AUG Loss: %.2f" % augLoss.data)
+            print("CLS Loss: %.2f" % clsLoss.data)
+            print("AUG Loss: %.2f" % augLoss.data)
 
-            self.log_string("Train Accuracy: %f" % train_acc)
-            self.log_string("Test Accuracy: %f" % test_acc)
+            print("Train Accuracy: %f" % train_acc)
+            print("Test Accuracy: %f" % test_acc)
 
             if scheduler_c is not None:
                 scheduler_c.step()
@@ -108,13 +101,12 @@ class PointAugmentation:
         test_pred = []
         test_true = []
 
-        for j, data in enumerate(loader, 0):
+        for data in loader:
             points, target = data
-            target = target[:, 0]
             points = points.transpose(2, 1)
             points, target = points.cuda(), target.cuda()
             classifier = model.eval()
-            pred, _, _ = classifier(points)
+            pred = classifier(points)[0]
             pred_choice = pred.data.max(1)[1]
 
             test_true.append(target.cpu().numpy())
