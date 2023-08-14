@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.utils.data
-import numpy as np
-import sklearn.metrics as metrics
-
 import Common.data_utils as d_utils
 from Common import loss_utils
+from utils import eval_model_classification, train_setup
+import mlflow
 
 # Set random seed for reproducibility
 # import random
@@ -37,6 +36,8 @@ class PointAugmentation:
         optimizer_c,
         scheduler_a,
         scheduler_c,
+        model_name="PointAug",
+        snapshot_path="./snapshots",
     ):
         classifier.to(dev)
         augmentor.to(dev)
@@ -49,74 +50,60 @@ class PointAugmentation:
         global_epoch = 0
         PointcloudScaleAndTranslate = d_utils.PointcloudScaleAndTranslate()
 
-        for epoch in range(epochs):
-            for batch, label in train:
-                batch, label = batch.to(dev), label.to(dev)
+        exp_id = train_setup(model_name, snapshot_path)
+        with mlflow.start_run(experiment_id=exp_id):
+            for epoch in range(epochs):
+                total_aug_loss = total_cls_loss = 0
+                for batch, label in train:
+                    batch, label = batch.to(dev), label.to(dev)
 
-                batch = PointcloudScaleAndTranslate(batch)
-                batch = batch.transpose(2, 1).contiguous()
+                    batch = PointcloudScaleAndTranslate(batch)
+                    batch = batch.transpose(2, 1).contiguous()
 
-                noise = 0.02 * torch.randn(batch.size()[0], 1024).to(dev)
+                    noise = 0.02 * torch.randn(batch.size()[0], 1024).to(dev)
 
-                classifier = classifier.train()
-                augmentor = augmentor.train()
-                optimizer_a.zero_grad()
-                aug_pc = augmentor(batch, noise)
+                    classifier = classifier.train()
+                    augmentor = augmentor.train()
+                    optimizer_a.zero_grad()
+                    aug_pc = augmentor(batch, noise)
 
-                pred_pc = classifier(batch)[0]
-                pred_aug = classifier(aug_pc)[0]
+                    pred_pc = classifier(batch)[0]
+                    pred_aug = classifier(aug_pc)[0]
 
-                augLoss = loss_utils.aug_loss(pred_pc, pred_aug, label)
+                    augLoss = loss_utils.aug_loss(pred_pc, pred_aug, label)
+                    total_aug_loss += augLoss
 
-                augLoss.backward(retain_graph=True)
-                optimizer_a.step()
+                    augLoss.backward(retain_graph=True)
+                    optimizer_a.step()
 
-                optimizer_c.zero_grad()
-                clsLoss = loss_utils.cls_loss(
-                    pred_pc,
-                    pred_aug,
-                    label,
+                    optimizer_c.zero_grad()
+                    clsLoss = loss_utils.cls_loss(
+                        pred_pc,
+                        pred_aug,
+                        label,
+                    )
+                    total_cls_loss += clsLoss
+                    clsLoss.backward(retain_graph=True)
+                    optimizer_c.step()
+
+                mlflow.log_metric("aug_loss", total_aug_loss / len(train), step=epoch)
+                mlflow.log_metric("cls_loss", total_cls_loss / len(train), step=epoch)
+
+                # evaluate classifier
+                train_metrics = eval_model_classification(
+                    classifier, train, prefix="train_"
                 )
-                clsLoss.backward(retain_graph=True)
-                optimizer_c.step()
+                test_metrics = eval_model_classification(
+                    classifier, test, prefix="test_"
+                )
 
-            train_acc = self.eval_one_epoch(classifier.eval(), train)
-            test_acc = self.eval_one_epoch(classifier.eval(), test)
+                mlflow.log_metrics(train_metrics | test_metrics, step=epoch)
+                mlflow.log_metric("lr_a", scheduler_a.get_last_lr()[0], step=epoch)
+                mlflow.log_metric("lr_c", scheduler_c.get_last_lr()[0], step=epoch)
 
-            print("CLS Loss: %.2f" % clsLoss.data)
-            print("AUG Loss: %.2f" % augLoss.data)
+                if scheduler_c is not None:
+                    scheduler_c.step()
+                if scheduler_a is not None:
+                    scheduler_a.step()
 
-            print("Train Accuracy: %f" % train_acc)
-            print("Test Accuracy: %f" % test_acc)
-
-            if scheduler_c is not None:
-                scheduler_c.step()
-            if scheduler_a is not None:
-                scheduler_a.step()
-
-            global_epoch += 1
-
-    def eval_one_epoch(self, model, loader):
-        mean_correct = []
-        test_pred = []
-        test_true = []
-
-        for data in loader:
-            points, target = data
-            points = points.transpose(2, 1)
-            points, target = points.cuda(), target.cuda()
-            classifier = model.eval()
-            pred = classifier(points)[0]
-            pred_choice = pred.data.max(1)[1]
-
-            test_true.append(target.cpu().numpy())
-            test_pred.append(pred_choice.detach().cpu().numpy())
-
-            correct = pred_choice.eq(target.long().data).cpu().sum()
-            mean_correct.append(correct.item() / float(points.size()[0]))
-
-        test_true = np.concatenate(test_true)
-        test_pred = np.concatenate(test_pred)
-        test_acc = metrics.accuracy_score(test_true, test_pred)
-
-        return test_acc
+                global_epoch += 1
