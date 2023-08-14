@@ -30,6 +30,7 @@ class PointAugmentation:
     def train(
         self,
         classifier,
+        augmentor,
         train,
         test,
         epochs,
@@ -39,7 +40,6 @@ class PointAugmentation:
         scheduler_c,
     ):
         classifier.to(dev)
-        augmentor = Augmentor()
         augmentor.to(dev)
 
         if torch.cuda.device_count() > 1:
