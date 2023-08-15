@@ -18,6 +18,14 @@ import numpy as np
 
 from .walk import Walk
 
+dev = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
+)
+
 
 def knn(x, k):
     k = k + 1
@@ -68,18 +76,15 @@ def index_points(points, idx):
     Return:
         new_points:, indexed points data, [B, S, C]
     """
-    device = points.device
     B = points.shape[0]
     view_shape = list(idx.shape)
     view_shape[1:] = [1] * (len(view_shape) - 1)
     repeat_shape = list(idx.shape)
     repeat_shape[0] = 1
     batch_indices = (
-        torch.arange(B, dtype=torch.long)
-        .to(device)
-        .view(view_shape)
-        .repeat(repeat_shape)
+        torch.arange(B, dtype=torch.long).to(dev).view(view_shape).repeat(repeat_shape)
     )
+
     new_points = points[batch_indices, idx, :]
     return new_points
 
@@ -92,12 +97,11 @@ def farthest_point_sample(xyz, npoint):
     Return:
         centroids: sampled pointcloud index, [B, npoint]
     """
-    device = xyz.device
     B, N, C = xyz.shape
-    centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)
-    distance = torch.ones(B, N).to(device) * 1e10
-    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device) * 0
-    batch_indices = torch.arange(B, dtype=torch.long).to(device)
+    centroids = torch.zeros(B, npoint, dtype=torch.long).to(dev)
+    distance = torch.ones(B, N).to(dev) * 1e10
+    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(dev) * 0
+    batch_indices = torch.arange(B, dtype=torch.long).to(dev)
     for i in range(npoint):
         centroids[:, i] = farthest
         centroid = xyz[batch_indices, farthest, :].view(B, 1, 3)
@@ -118,11 +122,10 @@ def query_ball_point(radius, nsample, xyz, new_xyz):
     Return:
         group_idx: grouped points index, [B, S, nsample]
     """
-    device = xyz.device
     B, N, C = xyz.shape
     _, S, _ = new_xyz.shape
     group_idx = (
-        torch.arange(N, dtype=torch.long).to(device).view(1, 1, N).repeat([B, S, 1])
+        torch.arange(N, dtype=torch.long).to(dev).view(1, 1, N).repeat([B, S, 1])
     )
     sqrdists = square_distance(new_xyz, xyz)
     group_idx[sqrdists > radius**2] = N
@@ -196,7 +199,6 @@ class LPFA(nn.Module):
     def __init__(self, in_channel, out_channel, k, mlp_num=2, initial=False):
         super(LPFA, self).__init__()
         self.k = k
-        self.device = torch.device("cuda")
         self.initial = initial
 
         if not initial:
@@ -234,9 +236,7 @@ class LPFA(nn.Module):
         if idx is None:
             idx = knn(xyz, k=self.k)[:, :, : self.k]  # (batch_size, num_points, k)
 
-        idx_base = (
-            torch.arange(0, batch_size, device=self.device).view(-1, 1, 1) * num_points
-        )
+        idx_base = torch.arange(0, batch_size, device=dev).view(-1, 1, 1) * num_points
         idx = idx + idx_base
         idx = idx.view(-1)
 
