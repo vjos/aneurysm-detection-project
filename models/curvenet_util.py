@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from time import time
 import numpy as np
+from pointnet2_ops import pointnet2_utils as pu
 
 from .walk import Walk
 
@@ -151,7 +152,8 @@ def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False):
     new_xyz = index_points(xyz, farthest_point_sample(xyz, npoint))
     torch.cuda.empty_cache()
 
-    idx = query_ball_point(radius, nsample, xyz, new_xyz)
+    # idx = query_ball_point(radius, nsample, xyz, new_xyz)
+    idx = pu.ball_query(radius, nsample, xyz, new_xyz)
     torch.cuda.empty_cache()
 
     new_points = index_points(points, idx)
