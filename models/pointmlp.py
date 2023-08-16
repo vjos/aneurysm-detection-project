@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pointnet2_ops import pointnet2_utils
-from model_utils import index_points, square_distance
+from models.model_utils import index_points, square_distance
 
 
 def get_activation(activation):
