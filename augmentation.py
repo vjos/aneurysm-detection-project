@@ -2,6 +2,12 @@ import numpy as np
 import torch
 
 
+def pcld_shuffle(batch):
+    idx = np.arange(batch.shape[1])
+    np.random.shuffle(idx)
+    return batch[:, idx, :]
+
+
 def pcld_dropout(batch, max_dropout=0.85):
     """Apply random point dropout (corruption) to the input pointcloud batch. Max dropout is the maximum ratio 0-max to dropout."""
     batch_size, npoints, channels = batch.shape
@@ -50,32 +56,61 @@ def pcld_scale(batch, scale_range=(0.8, 1.2)):
     return batch
 
 
-def aug_pointnet(batch):
-    """Applies dropout then scale and shift on (x,y,z)."""
-    # random dropout
-    batch = pcld_dropout(batch.data.numpy())
-    # scale and shift (wouldn't affect norm)
-    batch[:, :, 0:3] = pcld_shift(pcld_scale(batch[:, :, 0:3]))
+def rotate_pcld(batch):
+    """Randomly rotate the point clouds to augument the dataset
+    rotation is per shape based along up direction
+    Input:
+      BxNx3 array, original batch of point clouds
+    Return:
+      BxNx3 array, rotated batch of point clouds
+    """
+    rotated_data = np.zeros(batch.shape, dtype=np.float32)
+    for k in range(batch.shape[0]):
+        rotation_angle = np.random.uniform() * 2 * np.pi
+        cosval = np.cos(rotation_angle)
+        sinval = np.sin(rotation_angle)
+        rotation_matrix = np.array(
+            [[cosval, 0, sinval], [0, 1, 0], [-sinval, 0, cosval]]
+        )
+        shape_pc = batch[k, ...]
+        rotated_data[k, ...] = np.dot(shape_pc.reshape((-1, 3)), rotation_matrix)
+    return rotated_data
+
+
+def pcld_jitter(batch, sigma=0.01, clip=0.05):
+    """Randomly jitter points. jittering is per point.
+    Input:
+      BxNx3 array, original batch of point clouds
+    Return:
+      BxNx3 array, jittered batch of point clouds
+    """
+    B, N, C = batch.shape
+    assert clip > 0
+    jittered_data = np.clip(sigma * np.random.randn(B, N, C), -1 * clip, clip)
+    jittered_data += batch
+    return jittered_data
+
+
+def apply_augmentations(
+    batch,
+    rotation=True,
+    scaling=True,
+    jittering=True,
+    translation=True,
+    dropout=True,
+    shuffle=True,
+):
+    if rotation:
+        batch = rotate_pcld(batch.data.numpy())
+    if scaling:
+        batch = pcld_scale(batch)
+    if jittering:
+        batch = pcld_jitter(batch)
+    if translation:
+        batch = pcld_shift(batch)
+    if dropout:
+        batch = pcld_dropout(batch)
+    if shuffle:
+        batch = pcld_shuffle(batch)
+
     return torch.Tensor(batch)
-
-
-def aug_dgcnn(batch):
-    """Only shuffles each pointcloud. Original uses translation but paper omits; tensorflow uses jitter but pytorch omits."""
-    batch = batch.data.numpy()
-    for pcld in batch:
-        np.random.shuffle(pcld)
-    return torch.Tensor(batch)
-
-
-"""
-rotated_data = provider.rotate_point_cloud_with_normal(batch_data)
-rotated_data = provider.rotate_perturbation_point_cloud_with_normal(rotated_data)
-rotated_data = provider.rotate_point_cloud(batch_data)
-rotated_data = provider.rotate_perturbation_point_cloud(rotated_data)
-
-jittered_data = provider.random_scale_point_cloud(rotated_data[:,:,0:3])
-jittered_data = provider.shift_point_cloud(jittered_data)
-jittered_data = provider.jitter_point_cloud(jittered_data)
-rotated_data[:,:,0:3] = jittered_data
-return provider.shuffle_points(rotated_data)
-"""
