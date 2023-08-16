@@ -1,14 +1,8 @@
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_sched
-from pointnet2_ops.pointnet2_modules import PointnetFPModule, PointnetSAModule
-from torch.utils.data import DataLoader, DistributedSampler
-from torchvision import transforms
-
-import pointnet2.data.data_utils as d_utils
-from pointnet2.data.ModelNet40Loader import ModelNet40Cls
+from pointnet2_ops.pointnet2_modules import PointnetSAModule
 
 
 def set_bn_momentum_default(bn_momentum):
@@ -52,12 +46,10 @@ lr_clip = 1e-5
 bnm_clip = 1e-2
 
 
-class PointNet2ClassificationSSG(pl.LightningModule):
-    def __init__(self, hparams):
+class PointNet2ClassificationSSG(nn.Module):
+    def __init__(self):
         super().__init__()
-
-        self.hparams = hparams
-
+        self.hparams = {["model.use_xyz"]: True}
         self._build_model()
 
     def _build_model(self):
@@ -192,39 +184,3 @@ class PointNet2ClassificationSSG(pl.LightningModule):
         bnm_scheduler = BNMomentumScheduler(self, bn_lambda=bn_lbmd)
 
         return [optimizer], [lr_scheduler, bnm_scheduler]
-
-    def prepare_data(self):
-        train_transforms = transforms.Compose(
-            [
-                d_utils.PointcloudToTensor(),
-                d_utils.PointcloudScale(),
-                d_utils.PointcloudRotate(),
-                d_utils.PointcloudRotatePerturbation(),
-                d_utils.PointcloudTranslate(),
-                d_utils.PointcloudJitter(),
-                d_utils.PointcloudRandomInputDropout(),
-            ]
-        )
-
-        self.train_dset = ModelNet40Cls(
-            self.hparams["num_points"], transforms=train_transforms, train=True
-        )
-        self.val_dset = ModelNet40Cls(
-            self.hparams["num_points"], transforms=None, train=False
-        )
-
-    def _build_dataloader(self, dset, mode):
-        return DataLoader(
-            dset,
-            batch_size=self.hparams["batch_size"],
-            shuffle=mode == "train",
-            num_workers=4,
-            pin_memory=True,
-            drop_last=mode == "train",
-        )
-
-    def train_dataloader(self):
-        return self._build_dataloader(self.train_dset, mode="train")
-
-    def val_dataloader(self):
-        return self._build_dataloader(self.val_dset, mode="val")
