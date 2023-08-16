@@ -100,8 +100,9 @@ def apply_augmentations(
     dropout=True,
     shuffle=True,
 ):
+    batch = batch.data.numpy()
     if rotation:
-        batch = rotate_pcld(batch.data.numpy())
+        batch = rotate_pcld(batch)
     if scaling:
         batch = pcld_scale(batch)
     if jittering:
