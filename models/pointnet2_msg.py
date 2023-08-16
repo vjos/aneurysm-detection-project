@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pointnet2_ops.pointnet2_modules import PointnetSAModule, PointnetSAModuleMSG
-
 from pointnet2_ssg import PointNet2ClassificationSSG
 
 
