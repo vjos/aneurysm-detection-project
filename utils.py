@@ -104,6 +104,7 @@ def train_model(
     weight_decay=2e-4,
     snapshot_path="./snapshots",
     trans_loss=False,
+    gamma=0.7,
 ):
     model.to(dev)
 
@@ -114,13 +115,17 @@ def train_model(
             momentum=momentum,
             weight_decay=weight_decay,
         )
-    else:
+    elif opt == "adam":
         optimizer = optim.Adam(
+            model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=weight_decay
+        )
+    elif opt == "adamw":
+        optimizer = optim.AdamW(
             model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=weight_decay
         )
 
     if sched == "step":
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=gamma)
     else:
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer, epochs, eta_min=min_lr, last_epoch=-1
