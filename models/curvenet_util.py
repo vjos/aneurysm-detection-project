@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from time import time
 import numpy as np
 from pointnet2_ops import pointnet2_utils as pu
-from model_utils import index_points
+from models.model_utils import index_points
 
 from .walk import Walk
 
