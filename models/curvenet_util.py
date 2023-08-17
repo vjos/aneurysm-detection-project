@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from time import time
 import numpy as np
 from pointnet2_ops import pointnet2_utils as pu
+from model_utils import index_points
 
 from .walk import Walk
 
@@ -68,28 +69,6 @@ def square_distance(src, dst):
     return dist
 
 
-def index_points(points, idx):
-    """
-
-    Input:
-        points: input points data, [B, N, C]
-        idx: sample index data, [B, S]
-    Return:
-        new_points:, indexed points data, [B, S, C]
-    """
-    B = points.shape[0]
-    view_shape = list(idx.shape)
-    view_shape[1:] = [1] * (len(view_shape) - 1)
-    repeat_shape = list(idx.shape)
-    repeat_shape[0] = 1
-    batch_indices = (
-        torch.arange(B, dtype=torch.long).to(dev).view(view_shape).repeat(repeat_shape)
-    )
-
-    new_points = points[batch_indices, idx, :]
-    return new_points
-
-
 def farthest_point_sample(xyz, npoint):
     """
     Input:
@@ -111,30 +90,6 @@ def farthest_point_sample(xyz, npoint):
         distance[mask] = dist[mask]
         farthest = torch.max(distance, -1)[1]
     return centroids
-
-
-def query_ball_point(radius, nsample, xyz, new_xyz):
-    """
-    Input:
-        radius: local region radius
-        nsample: max sample number in local region
-        xyz: all points, [B, N, 3]
-        new_xyz: query points, [B, S, 3]
-    Return:
-        group_idx: grouped points index, [B, S, nsample]
-    """
-    B, N, C = xyz.shape
-    _, S, _ = new_xyz.shape
-    group_idx = (
-        torch.arange(N, dtype=torch.long).to(dev).view(1, 1, N).repeat([B, S, 1])
-    )
-    sqrdists = square_distance(new_xyz, xyz)
-    group_idx[sqrdists > radius**2] = N
-    group_idx = group_idx.sort(dim=-1)[0][:, :, :nsample]
-    group_first = group_idx[:, :, 0].view(B, S, 1).repeat([1, 1, nsample])
-    mask = group_idx == N
-    group_idx[mask] = group_first[mask]
-    return group_idx
 
 
 def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False):
