@@ -68,9 +68,7 @@ class IntrA(Dataset):
                     label_indices[l] = [idx]
             most_common = max([len(x) for x in label_indices.values()])
             for l in label_indices:
-                print(len(label_indices[l]))
                 if (diff := most_common - len(label_indices[l])) > 0:
-                    print(diff)
                     self.paths += [
                         self.paths[idx]
                         for idx in random.choices(label_indices[l], k=diff)
