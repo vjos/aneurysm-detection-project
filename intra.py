@@ -2,6 +2,7 @@ import numpy as np
 import os
 import torch
 from torch.utils.data import Dataset
+import random
 
 
 class IntrA(Dataset):
@@ -16,6 +17,7 @@ class IntrA(Dataset):
         kfold_splits=None,
         test=False,
         norm_only=False,
+        oversample=False,
     ):
         root = os.path.expanduser(root)
         self.npoints = npoints
@@ -56,6 +58,24 @@ class IntrA(Dataset):
                 self.labels = [0] * len(self.paths)
             else:
                 raise IOError(f"Unknown dataset type '{dataset}'.")
+
+        label_indices = {}
+        if oversample:
+            for idx, l in enumerate(self.labels):
+                if l in label_indices:
+                    label_indices[l].append(idx)
+                else:
+                    label_indices[l] = [idx]
+            most_common = max([len(x) for x in label_indices.values()])
+            for l in label_indices:
+                print(len(label_indices[l]))
+                if (diff := most_common - len(label_indices[l])) > 0:
+                    print(diff)
+                    self.paths += [
+                        self.paths[idx]
+                        for idx in random.choices(label_indices[l], k=diff)
+                    ]
+                    self.labels += [l] * diff
 
     def __getitem__(self, index):
         """Load pointcloud, sample/duplicate to correct npoints, then return with label."""
