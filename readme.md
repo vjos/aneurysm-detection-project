@@ -1,4 +1,5 @@
 ## Instructions
+This repo uses MLflow for model tracking. Environment variables to link to a tracking server can be found in .env.
 To run all the models in this repo successfully, a CUDA GPU is required. Set up the environment, either through the dockerfile or by manually installing the requirements and pointnet2_ops_lib/ with pip.
 
 The models were evaluated using the 5-fold cross validation splits from the IntrA dataset (data not included in this repo).
