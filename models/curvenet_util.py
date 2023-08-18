@@ -10,15 +10,14 @@ Modified by
 @Time: 2021/01/21 3:10 PM
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from time import time
-import numpy as np
-from pointnet2_ops import pointnet2_utils as pu
 from models.model_utils import index_points
-
+from pointnet2_ops import pointnet2_utils as pu
 from .walk import Walk
+
 
 dev = (
     "cuda"
