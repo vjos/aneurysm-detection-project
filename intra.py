@@ -26,10 +26,13 @@ class IntrA(Dataset):
         self.norm = norm
         self.norm_only = norm_only
 
+        # decide between predefined splits or random dataset (kfold_splits only supported for classification tasks)
         if kfold_splits:
             if test:
+                # load the test data for this fold
                 self.paths, self.labels = get_split_data(kfold_splits, root, fold)
             else:
+                # load the training data for this fold
                 train_splits = [1, 2, 3, 4, 5]
                 train_splits.remove(fold)
                 for i in train_splits:
@@ -37,14 +40,17 @@ class IntrA(Dataset):
                     self.paths += p
                     self.labels += l
         else:
+            # load only the generated data
             if dataset == "generated":
                 for i, cls in enumerate(["vessel", "aneurysm"]):
                     paths = get_paths(os.path.join(root, dataset, cls, "ad"))
                     self.paths += paths
                     self.labels += [i] * len(paths)
+            # load only annotated data (typically for segmentation)
             elif dataset == "annotated":
                 self.paths = get_paths(os.path.join(root, dataset, "ad"))
                 self.labels = [1] * len(self.paths)
+            # load data for classification tasks
             elif dataset == "classification":
                 for i, cls in enumerate(["vessel", "aneurysm"]):
                     paths = get_paths(os.path.join(root, "generated", cls, "ad"))
@@ -53,6 +59,7 @@ class IntrA(Dataset):
                 anno_paths = get_paths(os.path.join(root, "annotated", "ad"))
                 self.paths += anno_paths
                 self.labels += [1] * len(anno_paths)
+            # load complete brain vessels data
             elif dataset == "complete":
                 self.paths = get_paths(os.path.join(root, dataset))
                 self.labels = [0] * len(self.paths)
@@ -61,11 +68,14 @@ class IntrA(Dataset):
 
         label_indices = {}
         if oversample:
+            # get the indices for each class, separated by label
             for idx, l in enumerate(self.labels):
                 if l in label_indices:
                     label_indices[l].append(idx)
                 else:
                     label_indices[l] = [idx]
+
+            # if a class is under-represented, randomly oversample to match the size of the largest class
             most_common = max([len(x) for x in label_indices.values()])
             for l in label_indices:
                 if (diff := most_common - len(label_indices[l])) > 0:
@@ -80,9 +90,11 @@ class IntrA(Dataset):
         pcld = load_pointcloud(
             self.paths[index], norm=self.norm, norm_only=self.norm_only, seg=self.seg
         )
+
         point_sample = np.random.choice(
             pcld.shape[0], self.npoints, replace=(pcld.shape[0] < self.npoints)
         )
+
         pcld = pcld[point_sample, :]
 
         return pcld, self.labels[index]
@@ -129,7 +141,7 @@ def get_paths(dir):
 
 
 def get_split_data(splits_root, intra_root, fold):
-    """Returns list of full paths of all pointcloud files in the given fold split."""
+    """Returns list of full paths and labels of all pointcloud files in the given fold split."""
     paths = []
     labels = []
 
@@ -150,7 +162,3 @@ def get_split_data(splits_root, intra_root, fold):
     labels += [0] * counter
 
     return paths, labels
-
-
-if __name__ == "__main__":
-    dataset = IntrA("~/Documents/Datasets/IntrA")
