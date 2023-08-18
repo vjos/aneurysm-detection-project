@@ -14,11 +14,6 @@ RUN pip install -r /tmp/requirements.txt
 RUN pip install einops
 
 RUN mkdir -p /tmp/pointnet2_ops_lib/
-COPY ./pointMLP/pointnet2_ops_lib/ /tmp/pointnet2_ops_lib/
+COPY ./models/pointnet2_ops_lib/ /tmp/pointnet2_ops_lib/
 RUN pip install --upgrade pip
 RUN pip install /tmp/pointnet2_ops_lib/.
-
-
-# RUN conda update --force conda
-# RUN conda install cudatoolkit=11.8 -c pytorch -c nvidia -y
-# RUN conda install -c conda-forge cudatoolkit-dev -y
