@@ -1,4 +1,7 @@
+# Aneurysms Project
+
 ## Instructions
+
 This repo uses MLflow for model tracking. Environment variables to link to a tracking server can be found in .env.
 To run all the models in this repo successfully, a CUDA GPU is required. Set up the environment, either through the dockerfile or by manually installing the requirements and pointnet2_ops_lib/ with pip.
 
@@ -6,6 +9,7 @@ The models were evaluated using the 5-fold cross validation splits from the Intr
 The `models.ipynb` notebook contains example code required to train the PointMLP and CurveNet model on a single fold of the splits.
 
 ## Acknowledgements
+
 The `file_splits` are from the [IntrA dataset](https://github.com/intra3d2019/IntrA)
 
 ```
@@ -50,7 +54,11 @@ Title = {Pointnet++ Pytorch},
 Journal = {https://github.com/erikwijmans/Pointnet2_PyTorch},
 Year = {2018}
 }
+```
 
+`augmentation.py` contains some code from [PointNet++](https://github.com/charlesq34/pointnet2/)
+
+```
 @inproceedings{qi2017pointnet++,
 title={Pointnet++: Deep hierarchical feature learning on point sets in a metric space},
 author={Qi, Charles Ruizhongtai and Yi, Li and Su, Hao and Guibas, Leonidas J},
